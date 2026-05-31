@@ -11,11 +11,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_session(session_id: str, title: str, subject: str | None = None) -> dict[str, Any]:
+def create_session(session_id: str, title: str, subject: str | None = None, depth: str = "medium") -> dict[str, Any]:
     session = {
         "session_id": session_id,
         "title": title,
         "subject": subject,
+        "depth": depth,
         "status": "started",
         "audio_chunks": [],
         "created_at": _now(),

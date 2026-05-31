@@ -7,6 +7,5 @@ python-multipart
 PyMuPDF
 yt-dlp
 faster-whisper
-torch
 requests
 groq

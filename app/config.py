@@ -33,10 +33,6 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
-    # ── MCQ feature (local fine-tuned model) ──────────────────────────────────
-    MCQ_MODEL_PATH:   str = "outputs/final_model"
-    MCQ_MAX_QUESTIONS: int = 5
-
     @property
     def audio_dir(self) -> str:
         return f"{self.STORAGE_DIR}/audio"
