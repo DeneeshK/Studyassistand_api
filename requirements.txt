@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+pydantic-settings
+python-multipart
+PyMuPDF
+yt-dlp
+faster-whisper
+torch
+requests
+groq

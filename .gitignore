@@ -1,0 +1,59 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# FastAPI/Uvicorn and local runtime files
+*.log
+logs/
+*.pid
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated app storage
+storage/uploads/
+storage/pdf/
+storage/youtube/
+storage/audio/
+storage/transcripts/
+storage/notes/
+
+# Model/checkpoint outputs
+outputs/
+checkpoints/
+models/
+
+# Local tool and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
