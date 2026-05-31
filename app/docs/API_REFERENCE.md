@@ -1,162 +1,87 @@
-# EduMind Study Assistant API — Reference
+# EduMind Study Assistant API Reference
+
+This app-local reference mirrors the implemented API. The canonical reference is
+`docs/API_REFERENCE.md` at the repository root.
 
 Base URL: `http://localhost:8100`
 
-All endpoints return JSON. Swagger UI: `http://localhost:8100/docs`
-
----
-
 ## GET /health
 
-Health check.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "service": "EduMind Study Assistant API",
-  "timestamp": "2026-05-24T10:00:00+00:00"
-}
-```
-
----
+Returns service status, service name, and UTC timestamp.
 
 ## POST /pdf/short-note
 
-Upload a PDF and receive a structured learnable note.
+Uploads a PDF and returns extraction metadata plus a `LearnableNote`.
 
-**Request:** `multipart/form-data`
+Request content type: `multipart/form-data`
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `file` | file | ✅ | PDF file to process |
-| `title` | string | ❌ | Override the note title |
-| `subject` | string | ❌ | Subject hint (e.g. "Physics") |
-| `depth` | string | ❌ | `short` / `medium` / `deep` (default: `medium`) |
+| Field | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | PDF file. The filename must end with `.pdf`. |
+| `title` | No | Optional title override. |
+| `subject` | No | Optional subject hint. |
+| `depth` | No | `short`, `medium`, or `deep`; defaults to `medium`. |
 
-**Response:**
-```json
-{
-  "material_id": "uuid",
-  "source_type": "pdf",
-  "title": "Chapter 5 — Newton's Laws",
-  "extraction": {
-    "total_pages": 12,
-    "successful_pages": 11,
-    "failed_pages": [],
-    "low_text_pages": [3],
-    "is_probably_scanned": false,
-    "char_count": 14200
-  },
-  "note": { ... },
-  "error": null
-}
-```
-
-If the PDF is scanned/image-based, `note` is null and `error` explains why.
-
----
+Likely scanned PDFs return `note: null` and an explanatory `error`; OCR is not
+implemented.
 
 ## POST /youtube/learnable-note
 
-Paste a YouTube URL and get a learnable note from its transcript/subtitles.
+Generates a note from available YouTube captions or subtitles.
 
-**Request:** `application/json`
+Request content type: `application/json`
+
 ```json
 {
   "url": "https://www.youtube.com/watch?v=VIDEO_ID",
-  "title": "Optional override title",
+  "title": "Optional title",
   "subject": "Physics",
   "depth": "medium"
 }
 ```
 
-**Response:**
-```json
-{
-  "material_id": "uuid",
-  "source_type": "youtube",
-  "title": "Video title",
-  "video_url": "https://...",
-  "transcript_preview": "First 500 chars of transcript...",
-  "note": { ... },
-  "error": null
-}
-```
-
-If no transcript is available, `note` is null and `error` explains why.
-
----
+Invalid URLs, caption fetch failures, or videos without captions return the
+normal response model with `note: null` and `error` populated.
 
 ## POST /live-class/start
 
-Create a new live class recording session.
+Creates an in-memory live-class session.
 
-**Request:** `application/json`
 ```json
 {
-  "title": "Linear Algebra — Eigenvalues",
-  "subject": "Mathematics"
+  "title": "Linear Algebra",
+  "subject": "Mathematics",
+  "depth": "medium"
 }
 ```
 
-**Response:**
+Response:
+
 ```json
 {
   "session_id": "uuid",
   "status": "started",
-  "audio_upload_url": "/live-class/{session_id}/audio-chunk",
   "finish_url": "/live-class/{session_id}/finish"
 }
 ```
 
----
-
-## POST /live-class/{session_id}/audio-chunk
-
-Upload one audio chunk (WebM/Opus) captured from the browser.
-
-**Request:** `multipart/form-data`
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `file` | file | ✅ | WebM audio blob from MediaRecorder |
-
-**Response:**
-```json
-{
-  "session_id": "uuid",
-  "chunk_received": true,
-  "chunk_count": 5
-}
-```
-
----
-
 ## POST /live-class/{session_id}/finish
 
-Stop the session, combine all chunks, transcribe, and generate a note.
+Accepts the full recording as a single multipart file upload, converts it to
+16 kHz mono WAV, transcribes it with Faster Whisper, generates a note, and saves
+transcript/note artifacts.
 
-**Request:** No body needed.
+Request content type: `multipart/form-data`
 
-**Response:**
-```json
-{
-  "session_id": "uuid",
-  "status": "completed",
-  "transcript": "Full transcribed text...",
-  "note": { ... },
-  "error": null
-}
-```
+| Field | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | Full browser recording, typically WebM/Opus. |
 
-If processing fails, `status` is `"failed"` and `error` contains the reason.
+The current backend does not implement `/live-class/{session_id}/audio-chunk`.
 
----
+## Shared Note Shape
 
-## Learnable Note shape
-
-All three features return a note in this shape:
+All note-producing endpoints return `LearnableNote`:
 
 ```json
 {
@@ -181,10 +106,10 @@ All three features return a note in this shape:
     {
       "question": "string",
       "options": [
-        {"label": "A", "text": "string"},
-        {"label": "B", "text": "string"},
-        {"label": "C", "text": "string"},
-        {"label": "D", "text": "string"}
+        { "label": "A", "text": "string" },
+        { "label": "B", "text": "string" },
+        { "label": "C", "text": "string" },
+        { "label": "D", "text": "string" }
       ],
       "answer": "A",
       "explanation": "string"

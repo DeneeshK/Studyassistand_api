@@ -1,1 +1,1 @@
-# question_generator.py — questions are generated inside note_generator.py
+"""Compatibility module; question generation is handled by note_generator."""

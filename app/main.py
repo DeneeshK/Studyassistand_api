@@ -1,9 +1,15 @@
+"""FastAPI application setup for the EduMind Study Assistant API."""
+
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routes import health, pdf, youtube, live_class
 from app.storage.file_storage import ensure_storage_dirs
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="EduMind Study Assistant API",
@@ -44,6 +50,8 @@ app.add_middleware(
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
+    """Create local runtime storage directories before serving requests."""
+    logger.info("Initializing Study Assistant storage directories")
     ensure_storage_dirs()
 
 

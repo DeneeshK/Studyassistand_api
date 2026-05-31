@@ -1,12 +1,17 @@
+"""Study-note generation pipeline with Groq and deterministic fallback paths."""
+
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter
 from typing import Any
 
 from app.config import settings
 
+
+logger = logging.getLogger(__name__)
 
 MAX_LLM_CHARS = 14000
 
@@ -115,6 +120,7 @@ _SOURCE_HINTS: dict[str, str] = {
 
 
 def _system_prompt(depth: str) -> str:
+    """Return the LLM system prompt associated with the requested note depth."""
     if depth == "short":
         return _SYSTEM_FAST
     if depth == "deep":
@@ -123,11 +129,13 @@ def _system_prompt(depth: str) -> str:
 
 
 def _clean_text(text: str) -> str:
+    """Collapse whitespace in source text and remove surrounding space."""
     text = re.sub(r"\s+", " ", text or "")
     return text.strip()
 
 
 def _sentences(text: str) -> list[str]:
+    """Split source text into sentence-like units for fallback note generation."""
     normalized = re.sub(r"\s+", " ", text or "").strip()
     if not normalized:
         return []
@@ -139,6 +147,7 @@ def _sentences(text: str) -> list[str]:
 
 
 def _keywords(text: str, limit: int = 12) -> list[str]:
+    """Return frequent non-stopword terms from source text."""
     words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text or "")
     counter = Counter(
         word.lower()
@@ -149,6 +158,7 @@ def _keywords(text: str, limit: int = 12) -> list[str]:
 
 
 def _chunk_list(items: list[str], chunks: int) -> list[list[str]]:
+    """Split a list into approximately even chunks for fallback sections."""
     if not items:
         return []
     chunks = max(1, min(chunks, len(items)))
@@ -157,6 +167,7 @@ def _chunk_list(items: list[str], chunks: int) -> list[list[str]]:
 
 
 def _title_from_terms(text: str, fallback: str) -> str:
+    """Build a fallback title from frequent terms when no title is supplied."""
     terms = _keywords(text, 3)
     if not terms:
         return fallback
@@ -164,6 +175,7 @@ def _title_from_terms(text: str, fallback: str) -> str:
 
 
 def _section_heading(section_text: str, index: int) -> str:
+    """Create a fallback section heading from frequent section terms."""
     terms = _keywords(section_text, 3)
     if terms:
         return " ".join(term.capitalize() for term in terms)
@@ -171,6 +183,7 @@ def _section_heading(section_text: str, index: int) -> str:
 
 
 def _depth_section_count(depth: str) -> int:
+    """Return the fallback section count associated with a note depth."""
     if depth == "short":
         return 2
     if depth == "deep":
@@ -185,7 +198,18 @@ def _fallback_note(
     subject: str | None,
     depth: str = "medium",
 ) -> dict[str, Any]:
-    """Pure-Python fallback when LLM is unavailable."""
+    """Generate a deterministic note when the LLM path is unavailable.
+
+    Args:
+        text: Source text used to build the note.
+        source_type: Source label such as `pdf`, `youtube`, or `live_class`.
+        title: Optional caller-provided title.
+        subject: Optional subject hint.
+        depth: Requested note depth.
+
+    Returns:
+        A dictionary matching the shared `LearnableNote` response shape.
+    """
     clean = _clean_text(text)
     source_label = source_type.replace("_", " ")
     note_title = title or _title_from_terms(clean, "Learnable Note")
@@ -274,17 +298,34 @@ def _fallback_note(
 
 
 def _extract_json_object(value: str) -> dict[str, Any]:
+    """Parse a JSON object from an LLM response string.
+
+    The parser first tries the whole response after removing code fences, then
+    falls back to the first object-like block when extra text surrounds the JSON.
+
+    Args:
+        value: Raw model response content.
+
+    Returns:
+        Parsed JSON object.
+
+    Raises:
+        json.JSONDecodeError: If no valid JSON object can be parsed.
+    """
     value = re.sub(r"```(?:json)?", "", value).strip("`").strip()
     try:
         return json.loads(value)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", value, flags=re.DOTALL)
         if not match:
+            logger.warning("LLM response did not contain a parseable JSON object")
             raise
+        logger.debug("Parsing JSON object extracted from surrounding LLM response text")
         return json.loads(match.group(0))
 
 
 def _normalize_note(note: dict[str, Any], fallback_title: str) -> dict[str, Any]:
+    """Normalize model output into the expected learnable-note dictionary shape."""
     normalized = {
         "title": note.get("title") or fallback_title,
         "overview": note.get("overview") or "",
@@ -348,12 +389,27 @@ def _groq_note(
     subject: str | None,
     depth: str,
 ) -> dict[str, Any] | None:
+    """Generate a note with Groq when provider configuration is available.
+
+    Args:
+        text: Source text to summarize and teach from.
+        source_type: Source label used for prompt context.
+        title: Optional title override.
+        subject: Optional subject hint.
+        depth: Requested note depth.
+
+    Returns:
+        Normalized note dictionary, or None when the Groq path is unavailable or
+        fails and the caller should use the fallback generator.
+    """
     if not settings.GROQ_API_KEY:
+        logger.debug("Groq note generation skipped because GROQ_API_KEY is not configured")
         return None
 
     try:
         from groq import Groq
     except ImportError:
+        logger.warning("Groq package is not installed; using fallback note generation")
         return None
 
     fallback_title = title or "Learnable Note"
@@ -377,6 +433,13 @@ Source text:
 """.strip()
 
     try:
+        logger.info(
+            "Requesting Groq note generation source_type=%s depth=%s model=%s source_chars=%s",
+            source_type,
+            depth,
+            settings.GROQ_MODEL,
+            len(source),
+        )
         client = Groq(api_key=settings.GROQ_API_KEY)
         completion = client.chat.completions.create(
             model=settings.GROQ_MODEL,
@@ -387,8 +450,15 @@ Source text:
             temperature=0.3,
         )
         content = completion.choices[0].message.content or ""
-        return _normalize_note(_extract_json_object(content), fallback_title)
+        note = _normalize_note(_extract_json_object(content), fallback_title)
+        logger.info("Groq note generation completed source_type=%s depth=%s", source_type, depth)
+        return note
     except Exception:
+        logger.warning(
+            "Groq note generation failed; using fallback source_type=%s depth=%s",
+            source_type,
+            depth,
+        )
         return None
 
 
@@ -399,10 +469,29 @@ def generate_learnable_note(
     subject: str | None = None,
     depth: str = "medium",
 ) -> dict[str, Any]:
+    """Generate a learnable note from source text.
+
+    The function attempts Groq-backed generation first when configured, then
+    falls back to the deterministic Python generator if the provider path is not
+    available.
+
+    Args:
+        text: Source content from a PDF, YouTube transcript, or live-class
+            transcript.
+        source_type: Source label used for prompt context and fallback text.
+        title: Optional note title override.
+        subject: Optional subject hint.
+        depth: Requested note depth.
+
+    Returns:
+        Dictionary matching the shared `LearnableNote` response shape.
+    """
     depth = depth if depth in {"short", "medium", "deep"} else "medium"
+    logger.info("Generating learnable note source_type=%s depth=%s text_chars=%s", source_type, depth, len(text or ""))
     note = _groq_note(text, source_type, title, subject, depth)
     if note:
         return note
+    logger.info("Using fallback note generator source_type=%s depth=%s", source_type, depth)
     return _fallback_note(text, source_type, title, subject, depth)
 
 
@@ -412,6 +501,18 @@ def generate_chunk_summary(
     title: str | None = None,
     subject: str | None = None,
 ) -> str:
+    """Generate a compact summary for one long-PDF text chunk.
+
+    Args:
+        text: Chunk text extracted from a PDF.
+        source_type: Source label passed to the note generator.
+        title: Optional document title.
+        subject: Optional subject hint.
+
+    Returns:
+        Summary text used by the final long-PDF note generation step.
+    """
+    logger.info("Generating chunk summary source_type=%s text_chars=%s", source_type, len(text or ""))
     note = _groq_note(text, source_type, title, subject, "short")
     if note:
         parts = [note.get("overview", "")]
@@ -419,6 +520,7 @@ def generate_chunk_summary(
         return " ".join(part for part in parts if part)
 
     sentences = _sentences(text)
+    logger.info("Using fallback chunk summary source_type=%s sentence_count=%s", source_type, len(sentences))
     return " ".join(sentences[:6]) or _clean_text(text)[:1200]
 
 
@@ -428,5 +530,7 @@ def generate_final_note_from_chunk_summaries(
     subject: str | None = None,
     depth: str = "medium",
 ) -> dict[str, Any]:
+    """Generate a final note from summaries produced for long PDF chunks."""
+    logger.info("Generating final note from chunk summaries summary_count=%s depth=%s", len(summaries), depth)
     combined = "\n\n".join(summary for summary in summaries if summary)
     return generate_learnable_note(combined, "pdf", title, subject, depth)

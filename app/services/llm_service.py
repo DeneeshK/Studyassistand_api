@@ -1,1 +1,1 @@
-# llm_service.py — LLM calls are handled inside note_generator.py
+"""Compatibility module; current LLM calls are implemented in note_generator."""

@@ -1,3 +1,5 @@
+"""Environment-backed configuration for the Study Assistant API."""
+
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -5,6 +7,8 @@ APP_DIR = Path(__file__).resolve().parent
 
 
 class Settings(BaseSettings):
+    """Runtime settings loaded from environment variables and .env files."""
+
     # ── Core ──────────────────────────────────────────────────────────────────
     APP_NAME:   str = "EduMind Study Assistant API"
     APP_ENV:    str = "development"
@@ -35,9 +39,12 @@ class Settings(BaseSettings):
 
     @property
     def audio_dir(self) -> str:
+        """Return the configured directory for live-class audio artifacts."""
         return f"{self.STORAGE_DIR}/audio"
 
     class Config:
+        """Pydantic settings source configuration."""
+
         env_file = (".env", str(APP_DIR / ".env"))
         env_file_encoding = "utf-8"
         # Silently ignore env vars from the core backend (.env in project root)

@@ -1,110 +1,80 @@
 # EduMind Services Run Guide
 
-EduMind uses two separate backend services:
+EduMind commonly runs as separate services:
 
-| Service | Port | Purpose |
-|---|---|---|
-| EduMind Core API | 8000 | Courses, curriculum agents, student state, evaluation |
-| Study Assistant API | **8100** | PDF notes, YouTube notes, Live Class transcription |
+| Service | Default port | Purpose |
+| --- | --- | --- |
+| EduMind Core API | `8000` | Course and learning-platform backend. |
+| Study Assistant API | `8100` | PDF notes, YouTube notes, and live-class transcription. |
+| Frontend | `5173` | Browser application. |
 
----
+## Study Assistant Environment
 
-## Environment variables
+Copy `.env.example` to `.env` in this repository:
 
-### Frontend `.env`
-```env
-VITE_API_BASE_URL=http://localhost:8000
-VITE_STUDY_API_URL=http://localhost:8100
-```
-
-### EduMind Core API `.env`
-```env
-DATABASE_URL=postgresql+asyncpg://edumind:edumind123@localhost:5432/edumind_db
-GROQ_API_KEY=your_groq_api_key
-TAVILY_API_KEY=your_tavily_api_key
-EDUMIND_API_KEY=abc123
-CORS_ORIGINS=http://localhost:5173
-DEV_AUTH_ENABLED=true
-CHROMADB_PATH=./chromadb_data
-```
-
-### Study Assistant API `app/.env`
 ```env
 APP_NAME=EduMind Study Assistant API
+APP_ENV=development
+HOST=0.0.0.0
 PORT=8100
+FRONTEND_ORIGIN=http://localhost:5173
+CORE_API_URL=http://localhost:8000
+STUDY_API_URL=http://localhost:8100
+STORAGE_DIR=storage
 GROQ_API_KEY=your_groq_api_key
 GROQ_MODEL=llama-3.1-8b-instant
 WHISPER_MODEL=base.en
 WHISPER_DEVICE=auto
 WHISPER_COMPUTE_TYPE=auto
-STORAGE_DIR=storage
+MAX_UPLOAD_MB=200
+AUDIO_CHUNK_SECONDS=5
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-FRONTEND_ORIGIN=http://localhost:5173
 ```
 
----
+## Run Study Assistant API
 
-## Terminal 1: EduMind Core API
-```bash
-cd edumind_backend
-source .venv/bin/activate
-uvicorn app.api:app --host 0.0.0.0 --port 8000
-```
-
-## Terminal 2: Study Assistant API
-
-Run from the **project root** (the directory that contains the `app/` package):
+From the repository root:
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
 pip install -r app/requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
 ```
 
-Swagger UI: http://localhost:8100/docs
+Swagger UI: `http://localhost:8100/docs`
 
-## Terminal 3: Frontend
-```bash
-cd edumind_frontend
-npm install
-npm run dev
+## Frontend Environment
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_STUDY_API_URL=http://localhost:8100
 ```
 
-Open: http://localhost:5173
+## Manual Checklist
 
----
+Health:
 
-## Manual test checklist
+```bash
+curl http://localhost:8100/health
+```
 
-### Health
-- [ ] `curl http://localhost:8100/health` returns `{"status":"ok",...}`
+PDF notes:
 
-### PDF Notes
-- [ ] Go to Study Assistant → PDF Notes
-- [ ] Upload a text-based PDF with a title and subject
-- [ ] Note generates with sections, questions, and flashcards
-- [ ] Upload a scanned PDF → get clear "scanned PDF" message, no crash
+- Upload a text-based PDF and confirm a note is returned.
+- Upload a scanned/image-only PDF and confirm the response reports OCR is not
+  implemented.
 
-### YouTube Notes
-- [ ] Go to Study Assistant → YouTube Notes
-- [ ] Paste a YouTube URL with subtitles → note generates
-- [ ] Paste a video URL without subtitles → clear error message
-- [ ] Paste an invalid URL → validation error
+YouTube notes:
 
-### Live Class
-- [ ] Go to Study Assistant → Live Class Assistant
-- [ ] Enter a class title
-- [ ] Click "Start Live Assistant"
-- [ ] Browser tab-sharing popup appears
-- [ ] Select Google Meet tab with "Share tab audio" enabled
-- [ ] Status changes to "Recording class audio…"
-- [ ] Elapsed timer counts up
-- [ ] Chunk count increments every 5 seconds
-- [ ] Click "Stop and Generate Notes"
-- [ ] Status changes to "Transcribing…"
-- [ ] Transcript and learnable note appear
-- [ ] If no audio tab selected → clear error message shown
+- Submit a public YouTube URL with captions and confirm a note is returned.
+- Submit a video without captions and confirm a clear error response.
 
-### Existing course flow
-- [ ] `/courses` lists courses
-- [ ] Course creation, roadmap, evaluation, progress all work normally
+Live class:
+
+- Start a session with `POST /live-class/start`.
+- Submit a full recording file to `POST /live-class/{session_id}/finish`.
+- Confirm the response includes `status: "completed"`, transcript text, and a
+  note.
+
+The current Study Assistant API does not expose an audio-chunk upload endpoint.
