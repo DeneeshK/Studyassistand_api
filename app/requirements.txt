@@ -5,7 +5,8 @@ pydantic
 pydantic-settings
 python-multipart
 PyMuPDF
-yt-dlp
+youtube-transcript-api  # primary caption extractor — no cookies needed in production
+yt-dlp                  # fallback caption extractor
 faster-whisper
 requests
 groq
