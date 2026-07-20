@@ -24,6 +24,7 @@ cp .env.example .env
 | `STORAGE_DIR` | `storage` | Root directory for uploads, audio, transcripts, and notes. |
 | `GROQ_API_KEY` | empty | Enables Groq-backed note generation when set. |
 | `GROQ_MODEL` | `llama-3.1-8b-instant` | Groq chat model used by `note_generator.py`. |
+| `YOUTUBE_PROXY_URL` | empty | Optional HTTP(S) proxy for YouTube caption requests. Fixes `IpBlocked`/`RequestBlocked` errors when YouTube blocks this server's IP as a bot; used by both the `youtube-transcript-api` and `yt-dlp` extraction paths. |
 | `WHISPER_MODEL` | `base.en` | `faster-whisper` model name for live-class transcription. |
 | `WHISPER_DEVICE` | `auto` | `auto`, `cpu`, or `cuda`. |
 | `WHISPER_COMPUTE_TYPE` | `auto` | `auto`, `int8`, `float16`, or another supported Faster Whisper value. |

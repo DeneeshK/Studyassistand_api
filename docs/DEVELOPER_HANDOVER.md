@@ -28,7 +28,7 @@ models.
 | `app/transcription/audio_utils.py` | `ffmpeg` audio conversion helpers. |
 | `app/transcription/whisper_service.py` | Faster Whisper model loading and transcription. |
 | `app/storage/file_storage.py` | Local runtime file persistence. |
-| `app/storage/memory_store.py` | Process-local live-session state. |
+| `app/storage/session_store.py` | SQLite-backed, durable live-session state. |
 
 ## Operational Notes
 
@@ -38,7 +38,9 @@ models.
 - Set `GROQ_API_KEY` for provider-backed note generation.
 - Expect first Whisper transcription to take longer because the model may need
   to load or download.
-- Do not rely on in-memory sessions across restarts.
+- Live-class sessions persist to `STORAGE_DIR/sessions.db` and survive restarts
+  and multiple worker processes on the same host. They do not span multiple
+  hosts unless `STORAGE_DIR` is a shared network volume.
 
 ## Current Live-Class Contract
 
@@ -46,6 +48,10 @@ The implemented live-class flow is:
 
 1. Start a session with `POST /live-class/start`.
 2. Upload one complete recording file to `POST /live-class/{session_id}/finish`.
+   This returns `202 Accepted` immediately with a `status_url` — it does not
+   wait for transcription or note generation to finish.
+3. Poll `GET /live-class/{session_id}/status` until `status` is `completed`
+   (transcript + note populated) or `failed` (`error` populated).
 
 There is no implemented `/live-class/{session_id}/audio-chunk` route in the
 current code. Some older documentation referenced chunk uploads; that is not the
@@ -73,7 +79,6 @@ When modifying this backend:
 ## Known Gaps
 
 - No OCR for scanned PDFs.
-- No durable session store.
 - No automated test suite in the repository.
 - No app-level logging configuration.
 - `MAX_UPLOAD_MB` and `AUDIO_CHUNK_SECONDS` are settings values but are not

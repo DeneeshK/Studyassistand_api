@@ -40,8 +40,10 @@ Confirm:
 
 ## Live-Class Finish Returns Session Not Found
 
-Live-class sessions are stored in memory. Restarting the API clears all sessions.
-Start a new session and use the returned `session_id`.
+Live-class sessions are persisted to `STORAGE_DIR/sessions.db` and survive
+restarts. A 404 here means the `session_id` itself is wrong (for example, a
+stale ID from a previous run against a different `STORAGE_DIR`), not that the
+session expired. Start a new session and use the returned `session_id`.
 
 ## Live-Class Finish Says No Recording File Was Received
 
@@ -52,6 +54,17 @@ POST /live-class/{session_id}/finish
 ```
 
 The current backend expects the full recording at finish time.
+
+## Live-Class Status Stays "processing" And Never Completes
+
+`POST /live-class/{session_id}/finish` returns `202` immediately and
+processes the recording in a background task; it does not run inline.
+Poll `GET /live-class/{session_id}/status` rather than expecting a result from
+the `finish` call itself. If status never leaves `processing`, check the
+server logs for the background task's exception — a failure there updates the
+session to `status: "failed"` with an `error` message, so a status stuck on
+`processing` for a long time (well beyond expected transcription time) usually
+means the API process was restarted or killed mid-task.
 
 ## ffmpeg Errors
 

@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL:   str = "llama-3.1-8b-instant"
 
+    # ── YouTube extraction ─────────────────────────────────────────────────────
+    # Optional HTTP(S) proxy for caption requests, e.g. http://user:pass@host:port.
+    # Mitigates YouTube blocking datacenter/cloud IPs (IpBlocked/RequestBlocked)
+    # for both the youtube-transcript-api and yt-dlp extraction paths.
+    YOUTUBE_PROXY_URL: str = ""
+
     # ── Whisper (local — for Live Class transcription) ────────────────────────
     WHISPER_MODEL:        str = "base.en"
     WHISPER_DEVICE:       str = "auto"

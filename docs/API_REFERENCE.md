@@ -131,7 +131,7 @@ captions/subtitles.
 
 ## POST /live-class/start
 
-Creates an in-memory live-class session.
+Creates a durable live-class session, persisted to `STORAGE_DIR/sessions.db`.
 
 ### Request
 
@@ -163,9 +163,13 @@ Content type: `application/json`
 
 ## POST /live-class/{session_id}/finish
 
-Accepts the full live-class recording as one multipart upload, converts and
-transcribes it, generates a note, saves transcript/note files, and marks the
-session completed.
+Accepts the full live-class recording as one multipart upload and saves it,
+then returns immediately with `202 Accepted`. Conversion, transcription, and
+note generation continue in a background task after the response is sent —
+poll `GET /live-class/{session_id}/status` for the result. This endpoint does
+not block for the duration of transcription, since that can take minutes for
+a longer recording and would otherwise risk being killed by a proxy or
+gateway timeout on one long-held request.
 
 ### Request
 
@@ -175,26 +179,13 @@ Content type: `multipart/form-data`
 | --- | --- | --- | --- |
 | `file` | file | Yes | Full browser recording, typically WebM/Opus. |
 
-### Success Response
+### Response — `202 Accepted`
 
 ```json
 {
   "session_id": "uuid",
-  "status": "completed",
-  "transcript": "Full transcribed text...",
-  "note": {
-    "title": "Linear Algebra",
-    "overview": "string",
-    "prerequisites": [],
-    "sections": [],
-    "key_takeaways": [],
-    "short_revision_note": "string",
-    "common_doubts": [],
-    "practice_questions": [],
-    "mcqs": [],
-    "flashcards": []
-  },
-  "error": null
+  "status": "processing",
+  "status_url": "/live-class/{session_id}/status"
 }
 ```
 
@@ -204,8 +195,28 @@ Content type: `multipart/form-data`
 - Missing `file` raises `400` with a message explaining that the recording file
   must be sent as `file`.
 - Empty uploads raise `400` with `Uploaded recording is empty.`
-- Processing failures return `200` with `status: "failed"` and `error`
-  populated.
+
+## GET /live-class/{session_id}/status
+
+Returns the current processing status of a live-class session. Poll this
+after `/finish` returns `202` until `status` is `completed` or `failed`.
+
+### Response
+
+```json
+{
+  "session_id": "uuid",
+  "status": "processing",
+  "transcript": null,
+  "note": null,
+  "error": null
+}
+```
+
+`status` is one of `started`, `processing`, `completed`, or `failed`.
+`transcript` and `note` are populated once `status` is `completed`; `error` is
+populated once `status` is `failed`. Unknown sessions raise `404` with
+`Session not found.`
 
 ## Shared LearnableNote Shape
 

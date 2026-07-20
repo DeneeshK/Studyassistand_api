@@ -5,8 +5,8 @@ pydantic
 pydantic-settings
 python-multipart
 PyMuPDF
-youtube-transcript-api  # primary caption extractor — no cookies needed in production
-yt-dlp                  # fallback caption extractor
+youtube-transcript-api>=1.2.0,<2.0.0  # v1+ API: YouTubeTranscriptApi() is instantiated, use .list()/.fetch()
+yt-dlp                  # fallback caption extractor — update often; YouTube changes break old pins
 faster-whisper
 requests
 groq

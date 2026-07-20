@@ -97,3 +97,13 @@ def save_json_file(data: dict[str, Any], filename: str, subdir: str = "notes") -
         len(data),
     )
     return str(path)
+
+
+def load_text_file(path: str) -> str:
+    """Read UTF-8 text content from a previously stored file path."""
+    return Path(path).read_text(encoding="utf-8")
+
+
+def load_json_file(path: str) -> dict[str, Any]:
+    """Read and parse a previously stored JSON file path."""
+    return json.loads(Path(path).read_text(encoding="utf-8"))

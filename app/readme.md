@@ -37,8 +37,9 @@ Swagger UI: `http://localhost:8100/docs`
 | `GET /health` | Service status and timestamp. |
 | `POST /pdf/short-note` | Upload a PDF and generate a study note. |
 | `POST /youtube/learnable-note` | Generate a note from available YouTube captions. |
-| `POST /live-class/start` | Start an in-memory live-class session. |
-| `POST /live-class/{session_id}/finish` | Upload one full recording, transcribe it, and generate a note. |
+| `POST /live-class/start` | Start a durable live-class session. |
+| `POST /live-class/{session_id}/finish` | Upload one full recording; returns immediately and processes it in the background. |
+| `GET /live-class/{session_id}/status` | Poll for transcription/note-generation progress and result. |
 
 The implemented live-class API accepts the full recording on the finish
 endpoint. It does not currently expose an audio-chunk upload route.

@@ -90,7 +90,15 @@ def _extract_video_id(url: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _load_transcript_api():
-    """Import youtube-transcript-api, raising an install hint when missing."""
+    """Import youtube-transcript-api, raising an install hint when missing.
+
+    v1.x replaced the old static `YouTubeTranscriptApi.list_transcripts(...)`
+    call with an instantiated client (`YouTubeTranscriptApi().list(...)`) and
+    added dedicated IpBlocked/RequestBlocked exceptions for YouTube's
+    datacenter-IP bot detection -- the exact failure mode that used to force
+    every request down to the yt-dlp fallback, which is itself just as
+    exposed to that same blocking.
+    """
     try:
         from youtube_transcript_api import (
             YouTubeTranscriptApi,
@@ -98,13 +106,45 @@ def _load_transcript_api():
             TranscriptsDisabled,
             VideoUnavailable,
             CouldNotRetrieveTranscript,
+            IpBlocked,
+            RequestBlocked,
         )
-        return YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled, VideoUnavailable, CouldNotRetrieveTranscript
+        return (
+            YouTubeTranscriptApi,
+            NoTranscriptFound,
+            TranscriptsDisabled,
+            VideoUnavailable,
+            CouldNotRetrieveTranscript,
+            IpBlocked,
+            RequestBlocked,
+        )
     except ImportError as exc:
         raise RuntimeError(
             "youtube-transcript-api is required. "
             "Install it with: pip install youtube-transcript-api"
         ) from exc
+
+
+def _build_transcript_api_client(YouTubeTranscriptApi):
+    """Build a YouTubeTranscriptApi client, routed through a proxy if configured.
+
+    YOUTUBE_PROXY_URL is the mitigation for IpBlocked/RequestBlocked errors:
+    without it, a server running on a datacenter/cloud IP (AWS, GCP, Azure,
+    etc.) can get blocked by YouTube's bot detection with no recourse.
+    """
+    from app.config import settings
+
+    if not settings.YOUTUBE_PROXY_URL:
+        return YouTubeTranscriptApi()
+
+    from youtube_transcript_api.proxies import GenericProxyConfig
+
+    return YouTubeTranscriptApi(
+        proxy_config=GenericProxyConfig(
+            http_url=settings.YOUTUBE_PROXY_URL,
+            https_url=settings.YOUTUBE_PROXY_URL,
+        )
+    )
 
 
 _LANG_PRIORITY = ["en", "en-US", "en-GB", "en-IN"]
@@ -124,10 +164,28 @@ def _fetch_with_transcript_api(video_id: str) -> str | None:
         TranscriptsDisabled,
         VideoUnavailable,
         CouldNotRetrieveTranscript,
+        IpBlocked,
+        RequestBlocked,
     ) = _load_transcript_api()
 
+    api = _build_transcript_api_client(YouTubeTranscriptApi)
+
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_list = api.list(video_id)
+    except IpBlocked:
+        logger.warning(
+            "youtube-transcript-api: this server's IP is blocked by YouTube video_id=%s. "
+            "Set YOUTUBE_PROXY_URL to route caption requests through a proxy.",
+            video_id,
+        )
+        return None
+    except RequestBlocked:
+        logger.warning(
+            "youtube-transcript-api: request blocked by YouTube bot detection video_id=%s. "
+            "Set YOUTUBE_PROXY_URL to route caption requests through a proxy.",
+            video_id,
+        )
+        return None
     except (TranscriptsDisabled, VideoUnavailable, CouldNotRetrieveTranscript) as exc:
         logger.warning(
             "youtube-transcript-api: transcript unavailable video_id=%s reason=%s",
@@ -281,6 +339,8 @@ def _fetch_with_ytdlp(url: str) -> tuple[str, str | None]:
 
     Returns (transcript_text, video_title). Transcript text may be empty.
     """
+    from app.config import settings
+
     yt_dlp = _load_ytdlp()
     options = {
         "quiet": True,
@@ -289,6 +349,10 @@ def _fetch_with_ytdlp(url: str) -> tuple[str, str | None]:
         "writesubtitles": True,
         "writeautomaticsub": True,
     }
+    if settings.YOUTUBE_PROXY_URL:
+        # This fallback path is just as exposed to YouTube's datacenter-IP
+        # bot detection as the primary path, so it shares the same proxy.
+        options["proxy"] = settings.YOUTUBE_PROXY_URL
 
     with yt_dlp.YoutubeDL(options) as ydl:
         logger.info("yt-dlp: fetching metadata for fallback transcript lookup url=%s", url)

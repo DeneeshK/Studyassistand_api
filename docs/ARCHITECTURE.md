@@ -81,9 +81,9 @@ loads `faster-whisper` lazily, and transcribes converted audio.
 `app/storage/file_storage.py` writes uploads, transcripts, and generated notes
 under `STORAGE_DIR`. Filenames and subdirectories are sanitized before writing.
 
-`app/storage/memory_store.py` keeps live-class session metadata in a process-local
-dictionary. This state is intentionally simple and is not durable across process
-restarts.
+`app/storage/session_store.py` keeps live-class session metadata in a SQLite
+file under `STORAGE_DIR`. Session state survives process restarts and is shared
+by every worker process pointed at the same `STORAGE_DIR`.
 
 ## Data Flow
 
@@ -108,13 +108,16 @@ restarts.
 
 ### Live-Class Notes
 
-1. `POST /live-class/start` creates an in-memory session.
-2. `POST /live-class/{session_id}/finish` receives one full recording file.
-3. The uploaded recording is saved under `storage/audio/{session_id}`.
-4. `ffmpeg` converts the recording to 16 kHz mono WAV.
-5. `faster-whisper` transcribes the WAV file.
-6. Transcript and generated note JSON are saved to local storage.
-7. The session status is updated and the response returns transcript and note.
+1. `POST /live-class/start` creates a durable session record.
+2. `POST /live-class/{session_id}/finish` receives one full recording file,
+   saves it under `storage/audio/{session_id}`, and returns `202 Accepted`
+   immediately with a `status_url`.
+3. In a background task: `ffmpeg` converts the recording to 16 kHz mono WAV,
+   `faster-whisper` transcribes it, and a note is generated.
+4. Transcript and generated note JSON are saved to local storage, and the
+   session status is updated to `completed` (or `failed` with an error).
+5. The frontend polls `GET /live-class/{session_id}/status` until the session
+   is `completed` or `failed`.
 
 ## Failure Handling
 
